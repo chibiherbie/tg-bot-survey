@@ -1,0 +1,2 @@
+class MailingStatusInvalidTransactionError(Exception):
+    pass

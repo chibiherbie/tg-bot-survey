@@ -1,0 +1,2 @@
+class AlreadyHaveReferrerError(Exception):
+    pass

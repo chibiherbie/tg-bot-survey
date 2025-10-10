@@ -1,0 +1,2 @@
+class UserRegistrationStatusInvalidTransactionError(Exception):
+    pass
