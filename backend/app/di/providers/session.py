@@ -43,7 +43,10 @@ class SessionProvider(Provider):
         self,
         async_engine: AsyncEngine,
     ) -> AsyncGenerator[async_sessionmaker[AsyncSession], Any]:
-        session_maker = async_sessionmaker(async_engine)
+        session_maker = async_sessionmaker(
+            async_engine,
+            expire_on_commit=False,
+        )
         yield session_maker
 
     @provide(scope=Scope.REQUEST)

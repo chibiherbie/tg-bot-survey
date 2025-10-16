@@ -1,4 +1,5 @@
 from dishka import Provider, Scope
+from services.checklist import ChecklistFlowService
 from services.health import HealthCheckService
 from services.referral_system import ReferralSystemService
 from services.telegram import TelegramService
@@ -12,4 +13,5 @@ service_provider.provide_all(
     TelegramAuthService,
     HealthCheckService,
     ReferralSystemService,
+    ChecklistFlowService,
 )

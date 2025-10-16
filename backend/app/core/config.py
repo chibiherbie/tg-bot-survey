@@ -23,5 +23,4 @@ class CoreSettings(BaseSettings):
     def v1_api_url(self) -> URL:
         return self.base_api_url / "v1"
 
-
 core_settings = CoreSettings()
