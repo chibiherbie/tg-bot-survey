@@ -1,3 +1,3 @@
-from entities import mailings, user
+from entities import user
 
-__all__ = ["mailings", "user"]
+__all__ = ["user"]

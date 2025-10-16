@@ -3,7 +3,6 @@ from .interactor import interactor_provider
 from .repository import repository_provider
 from .service import service_provider
 from .session import session_provider
-from .tools import tools_provider
 
 __all__ = [
     "all_providers",
@@ -12,7 +11,6 @@ __all__ = [
     "repository_provider",
     "service_provider",
     "session_provider",
-    "tools_provider",
 ]
 
 all_providers = [
@@ -21,5 +19,4 @@ all_providers = [
     service_provider,
     client_provider,
     interactor_provider,
-    tools_provider,
 ]

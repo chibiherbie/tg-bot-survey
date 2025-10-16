@@ -1,6 +1,5 @@
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
-from clients.openai import OpenAIClient
 from dishka import Provider, Scope, provide
 from telegram.config import telegram_settings
 
@@ -19,6 +18,3 @@ class ClientProvider(Provider):
 
 
 client_provider = ClientProvider(scope=Scope.REQUEST)
-client_provider.provide_all(
-    OpenAIClient,
-)

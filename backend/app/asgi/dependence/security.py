@@ -1,6 +1,5 @@
 from typing import Annotated
 
-from core.config import core_settings
 from core.security.globals import (
     HEADER_TOKEN_KEY,
     TELEGRAM_WEBHOOK_SECRET_HEADER,
@@ -45,9 +44,8 @@ class TelegramWebhookApiSecretDepends:
 
 
 class TokenDepends:
-    def __init__(self, group: Group, client_id: str | None = None):
+    def __init__(self, group: Group):
         self.group = group
-        self.client_id = client_id
 
     def __call__(self, jwt_token: HeaderTokenSec) -> TokenSchema:
         schema = get_token(jwt_token)
@@ -60,19 +58,6 @@ class TokenDepends:
                 return schema
             case Group.USER:
                 if not all([schema.user_id, Group.USER in schema.groups]):
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                    )
-                return schema
-            case Group.SERVICE:
-                if not all(
-                    [
-                        schema.client_id,
-                        Group.SERVICE in schema.groups,
-                        not self.client_id
-                        or schema.client_id == self.client_id,
-                    ],
-                ):
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
                     )
@@ -101,10 +86,6 @@ async def get_current_user(
 
 
 CurrentUserDependency = Annotated[User, Depends(get_current_user)]
-backend_token_depends: params.Depends = Depends(
-    TokenDepends(Group.SERVICE, client_id=core_settings.PROCESSING_CLIENT_ID),
-)
-BackendTokenDependency = Annotated[TokenSchema, backend_token_depends]
 
 TelegramWebhookSecretDependency = Annotated[
     str,

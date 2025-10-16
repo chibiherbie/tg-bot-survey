@@ -8,9 +8,4 @@ class SharedSettings(BaseSettings):
     )
 
 
-class MailingSettings(BaseSettings):
-    THROTTLER_RATE_LIMIT: int = 23
-
-
 shared_settings = SharedSettings()
-mailing_settings = MailingSettings()

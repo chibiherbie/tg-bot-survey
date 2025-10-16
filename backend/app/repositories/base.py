@@ -2,11 +2,9 @@ from collections.abc import Sequence
 from typing import Any, TypeVar
 
 from shared.models.base import DBModel
-from sqlalchemy import ClauseElement, exists, select, text
+from sqlalchemy import ClauseElement, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.base import ExecutableOption
-from sqlalchemy.dialects.postgresql import insert
-
 
 T = TypeVar("T", bound=DBModel)
 
@@ -58,42 +56,6 @@ class BaseRepository[T]:
         await self.session.commit()
         await self.session.refresh(obj)
         return obj
-
-    async def upsert(
-        self,
-        insert_values: dict[str, Any],
-        update_values: dict[str, Any],
-        conflict_target: list[str],
-        where_condition: dict[str, Any] | None = None,
-    ) -> T | None:
-        """Добавляет новый report или обновляет существующий, используя upsert."""
-        # Если передано условие where, добавляем его к запросу
-        where = None
-        if where_condition:
-            where = and_(
-                *[getattr(self.model, key) == value for key, value in where_condition.items()],
-            )
-        stmt = (
-            insert(self.model)
-            .values(**insert_values)
-            .on_conflict_do_update(
-                index_elements=conflict_target,
-                set_=update_values,
-                where=where,
-            )
-            .returning(self.model)
-        )
-        result = await self.session.execute(stmt)
-        row = res.one()  # гарантируем, что есть одна строка
-        obj_id = row.id
-        created = bool(row.created)
-
-        # 5) получаем ORM-объект и коммитим
-        obj = await self.session.get(self.model, obj_id)
-        await self.session.commit()
-
-        return obj, created
-        return result.scalar_one_or_none()
 
     async def put(self, target_id: int, obj_in: dict[str, Any]) -> T:
         if not (obj := await self.get(target_id)):

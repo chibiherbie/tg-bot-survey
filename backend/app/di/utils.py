@@ -4,7 +4,6 @@ from di.providers import (
     repository_provider,
     service_provider,
     session_provider,
-    tools_provider,
 )
 from dishka import make_async_container
 
@@ -16,5 +15,4 @@ def create_container():
         repository_provider,
         service_provider,
         session_provider,
-        tools_provider,
     )

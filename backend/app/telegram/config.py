@@ -11,6 +11,7 @@ class TelegramSettings(BaseSettings):
 
     TELEGRAM_ADMIN_CHAT_ID: int
     TELEGRAM_SERVICE_CHAT_ID: int
+    TELEGRAM_USE_WEBHOOK: bool = True
 
     @property
     def webhook_url(self) -> URL:
