@@ -34,6 +34,8 @@ dependencies = [
     "rich>=14.0.0",
     "better-exceptions>=0.3.3",
     "colorama>=0.4.6",
+    "openpyxl>=3.1",
+    "email-validator>=2.2",
 ]
 
 [build-system]

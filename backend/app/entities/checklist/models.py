@@ -1,24 +1,31 @@
 from datetime import datetime
 
-from entities.checklist.enums import (
-    ChecklistAnswerValue,
-    ChecklistSessionStatus,
-)
+from entities.checklist.enums import ChecklistAnswerValue, ChecklistSessionStatus
 from shared.models.base import DBModel
 from shared.models.mixins import CreatedAtMixin, UpdatedAtMixin
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Column,
     DateTime,
     Enum as SQLEnum,
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     sql,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+
+position_group_table = Table(
+    "position_checklist_groups",
+    DBModel.metadata,
+    Column("position_id", ForeignKey("positions.id", ondelete="CASCADE"), primary_key=True),
+    Column("group_id", ForeignKey("checklist_groups.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Position(DBModel, CreatedAtMixin, UpdatedAtMixin):
@@ -30,9 +37,9 @@ class Position(DBModel, CreatedAtMixin, UpdatedAtMixin):
         back_populates="position",
         cascade="all,delete",
     )
-    checklists: Mapped[list["Checklist"]] = relationship(
-        back_populates="position",
-        cascade="all,delete",
+    groups: Mapped[list["ChecklistGroup"]] = relationship(
+        back_populates="positions",
+        secondary=position_group_table,
     )
 
 
@@ -40,7 +47,7 @@ class Employee(DBModel, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "employees"
 
     tab_number: Mapped[str] = mapped_column(String(50), unique=True, index=True)
-    full_name: Mapped[str | None] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
 
     position_id: Mapped[int] = mapped_column(
         ForeignKey("positions.id", ondelete="RESTRICT"),
@@ -53,6 +60,22 @@ class Employee(DBModel, CreatedAtMixin, UpdatedAtMixin):
     )
 
 
+class ChecklistGroup(DBModel, CreatedAtMixin, UpdatedAtMixin):
+    __tablename__ = "checklist_groups"
+
+    name: Mapped[str] = mapped_column(String(255), unique=True)
+    description: Mapped[str | None] = mapped_column(Text())
+
+    positions: Mapped[list[Position]] = relationship(
+        back_populates="groups",
+        secondary=position_group_table,
+    )
+    checklists: Mapped[list["Checklist"]] = relationship(
+        back_populates="group",
+        cascade="all,delete-orphan",
+    )
+
+
 class Checklist(DBModel, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "checklists"
 
@@ -60,10 +83,13 @@ class Checklist(DBModel, CreatedAtMixin, UpdatedAtMixin):
     description: Mapped[str | None] = mapped_column(Text())
     is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
 
-    position_id: Mapped[int] = mapped_column(
-        ForeignKey("positions.id", ondelete="CASCADE"),
+    is_default: Mapped[bool] = mapped_column(Boolean(), default=False)
+
+    group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("checklist_groups.id", ondelete="SET NULL"),
+        nullable=True,
     )
-    position: Mapped[Position] = relationship(back_populates="checklists")
+    group: Mapped[ChecklistGroup | None] = relationship(back_populates="checklists")
 
     questions: Mapped[list["ChecklistQuestion"]] = relationship(
         back_populates="checklist",
@@ -71,9 +97,7 @@ class Checklist(DBModel, CreatedAtMixin, UpdatedAtMixin):
         order_by="ChecklistQuestion.order",
     )
 
-    sessions: Mapped[list["ChecklistSession"]] = relationship(
-        back_populates="checklist",
-    )
+    sessions: Mapped[list["ChecklistSession"]] = relationship(back_populates="checklist")
 
 
 class ChecklistQuestion(DBModel, CreatedAtMixin, UpdatedAtMixin):

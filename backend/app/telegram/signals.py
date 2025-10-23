@@ -14,7 +14,7 @@ from dishka.integrations.aiogram import (
 )
 from services.telegram import TelegramService
 from telegram.config import telegram_settings
-from telegram.handlers import service_commands, commands, checklist
+from telegram.handlers import admin, service_commands, commands, checklist
 from telegram.middlewares.outer.logging import TelegramLoggingMiddleware
 from telegram.middlewares.outer.user import UserMiddleware
 
@@ -40,6 +40,7 @@ async def aiogram_startup() -> None:
     dispatcher.include_router(service_commands.router)
     dispatcher.include_router(commands.router)
     dispatcher.include_router(checklist.router)
+    dispatcher.include_router(admin.router)
     setup_dishka_aiogram(container, dispatcher, auto_inject=True)
     inject_router_aiogram(dispatcher)
     if telegram_settings.TELEGRAM_USE_WEBHOOK:

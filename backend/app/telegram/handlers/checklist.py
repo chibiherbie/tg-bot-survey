@@ -3,17 +3,20 @@ from collections.abc import Mapping
 from aiogram import F, Router
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, PhotoSize
+from aiogram.types import CallbackQuery, Message, PhotoSize
 from dishka import FromDishka
 
 from entities.checklist.enums import ChecklistAnswerValue
-from entities.checklist.models import ChecklistQuestion
+from entities.checklist.models import ChecklistQuestion, Employee
 from entities.user.models import User
 from services.checklist import ChecklistFlowService
+from services.position_change import PositionChangeRequestService
 from services.telegram import TelegramService
 from shared.enums.group import Group
+from telegram.callback_data.checklist import PositionConfirmCallback
 from telegram.keyboards.checklist import (
     checklist_answer_keyboard,
+    position_confirmation_keyboard,
     remove_keyboard,
 )
 from telegram.middlewares.filters.chat import ChatTypeFilter
@@ -121,6 +124,92 @@ async def _advance_flow(
     )
 
 
+async def _start_checklist_flow(
+    *,
+    user: User,
+    employee: Employee,
+    state: FSMContext,
+    checklist_flow_service: ChecklistFlowService,
+    telegram_service: TelegramService,
+    chat_id: int,
+    message: Message | None,
+) -> None:
+    await state.update_data(pending_employee_tab=None, pending_employee_id=None)
+
+    checklist = await checklist_flow_service.get_active_checklist_for_employee(employee)
+    if checklist is None:
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text=(
+                "Подходящий чеклист не найден. Обратитесь к администратору, "
+                "чтобы настроить вашу должность или группу."
+            ),
+        )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    session, created = await checklist_flow_service.start_or_get_session(
+        user_id=user.id,
+        employee=employee,
+        checklist=checklist,
+    )
+    session = await checklist_flow_service.load_session(session.id)
+    if session is None:
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Не удалось подготовить опрос. Попробуйте позже.",
+        )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    questions = await checklist_flow_service.list_questions(session.checklist_id)
+    if not questions:
+        await checklist_flow_service.complete_session(session)
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="В опросе нет вопросов. Сообщите администратору.",
+        )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    await state.update_data(
+        session_id=session.id,
+        question_ids=[question.id for question in questions],
+    )
+
+    info_message = None
+    if not created and session.employee_id != employee.id:
+        info_message = await telegram_service.send_message(
+            chat_id=chat_id,
+            text="У вас уже есть незавершенный опрос. Продолжаем его.",
+        )
+    else:
+        position_name = employee.position.name if employee.position else ""
+        employee_label = f"Табельный № {employee.tab_number}"
+        if position_name:
+            employee_label = f"{employee_label} ({position_name})"
+        info_message = await telegram_service.send_message(
+            chat_id=chat_id,
+            text=f"Найден сотрудник {employee_label}. Начинаем опрос.",
+        )
+
+    base_message = info_message or message
+    if base_message is None:
+        base_message = await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Продолжаем опрос.",
+        )
+        if base_message is None:
+            return
+
+    await _advance_flow(
+        telegram_service=telegram_service,
+        checklist_flow_service=checklist_flow_service,
+        message=base_message,
+        state=state,
+    )
+
+
 @router.message(
     ChecklistStates.waiting_tab_number,
     GroupFilter(Group.USER),
@@ -142,71 +231,116 @@ async def handle_tab_number(
         return
 
     employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
-    if employee is None:
+    if employee is None or not employee.is_active:
         await telegram_service.send_message(
             chat_id=message.chat.id,
-            text="Сотрудник с таким табельным номером не найден. Проверьте номер и попробуйте снова.",
+            text="Сотрудник с таким табельным номером не найден или уже неактивен. Уточните номер и попробуйте снова.",
         )
         return
 
-    checklist = await checklist_flow_service.get_active_checklist_for_employee(
-        employee,
-    )
-    if checklist is None:
-        await telegram_service.send_message(
-            chat_id=message.chat.id,
-            text="Для вашей должности пока нет доступного опроса.",
-        )
-        await state.clear()
-        return
-
-    session, created = await checklist_flow_service.start_or_get_session(
-        user_id=user.id,
-        employee=employee,
-        checklist=checklist,
-    )
-    session = await checklist_flow_service.load_session(session.id)
-    if session is None:
-        await telegram_service.send_message(
-            chat_id=message.chat.id,
-            text="Не удалось подготовить опрос. Попробуйте позже.",
-        )
-        await state.clear()
-        return
-
-    questions = await checklist_flow_service.list_questions(session.checklist_id)
-    if not questions:
-        await checklist_flow_service.complete_session(session)
-        await telegram_service.send_message(
-            chat_id=message.chat.id,
-            text="В опросе нет вопросов. Сообщите администратору.",
-        )
-        await state.clear()
-        return
-
+    position_name = employee.position.name if employee.position else "не указана"
     await state.update_data(
-        session_id=session.id,
-        question_ids=[question.id for question in questions],
+        pending_employee_tab=employee.tab_number,
+        pending_employee_id=employee.id,
+    )
+    await state.set_state(ChecklistStates.confirm_position)
+    await telegram_service.send_message(
+        chat_id=message.chat.id,
+        text=(
+            f"Текущая должность: {position_name}.\n"
+            "Это ваша должность?"
+        ),
+        reply_markup=position_confirmation_keyboard(),
     )
 
-    if not created and session.employee_id != employee.id:
-        await telegram_service.send_message(
-            chat_id=message.chat.id,
-            text="У вас уже есть незавершенный опрос. Продолжаем его.",
-        )
-    else:
-        full_name = employee.full_name or "Сотрудник"
-        position_name = employee.position.name if employee.position else ""
-        await telegram_service.send_message(
-            chat_id=message.chat.id,
-            text=f"Начинаем опрос.",
-        )
 
-    await _advance_flow(
-        telegram_service=telegram_service,
-        checklist_flow_service=checklist_flow_service,
-        message=message,
+@router.callback_query(
+    ChecklistStates.confirm_position,
+    PositionConfirmCallback.filter(),
+    GroupFilter(Group.USER),
+)
+async def handle_position_confirmation(
+    callback: CallbackQuery,
+    callback_data: PositionConfirmCallback,
+    state: FSMContext,
+    user: User,
+    checklist_flow_service: FromDishka[ChecklistFlowService],
+    telegram_service: FromDishka[TelegramService],
+    position_change_service: FromDishka[PositionChangeRequestService],
+) -> None:
+    await callback.answer()
+    data = await state.get_data()
+    tab_number = data.get("pending_employee_tab")
+    chat_id = callback.message.chat.id if callback.message else callback.from_user.id
+
+    if tab_number is None:
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Состояние утеряно. Введите табельный номер ещё раз.",
+        )
+        return
+
+    action = callback_data.action
+    if action == "deny":
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Введите корректный табельный номер.",
+            reply_markup=remove_keyboard(),
+        )
+        await state.update_data(pending_employee_tab=None, pending_employee_id=None)
+        return
+
+    if action == "request_change":
+        employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+        if employee is None:
+            await telegram_service.send_message(
+                chat_id=chat_id,
+                text="Не удалось найти сотрудника для заявки. Попробуйте позже.",
+            )
+            await state.set_state(ChecklistStates.waiting_tab_number)
+            return
+        success = await position_change_service.send_request(user, employee)
+        if success:
+            await telegram_service.send_message(
+                chat_id=chat_id,
+                text="Заявка успешно отправлена. Ожидайте обновления и повторите попытку позже.",
+            )
+        else:
+            await telegram_service.send_message(
+                chat_id=chat_id,
+                text="Не удалось отправить заявку. Сообщите администратору.",
+            )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    if action != "confirm":
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Неизвестное действие. Введите табельный номер ещё раз.",
+        )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+    if employee is None or not employee.is_active:
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Сотрудник не найден или стал неактивным. Введите табельный номер снова.",
+        )
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+
+    base_message = callback.message
+    await _start_checklist_flow(
+        user=user,
+        employee=employee,
         state=state,
+        checklist_flow_service=checklist_flow_service,
+        telegram_service=telegram_service,
+        chat_id=chat_id,
+        message=base_message,
     )
 
 

@@ -1,9 +1,11 @@
 from collections.abc import Sequence
+from datetime import UTC, date, datetime, time
 
 from entities.checklist.enums import ChecklistSessionStatus
 from entities.checklist.models import (
     Checklist,
     ChecklistAnswer,
+    ChecklistGroup,
     ChecklistQuestion,
     ChecklistSession,
     Employee,
@@ -19,6 +21,11 @@ class PositionRepository(BaseRepository[Position]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Position, session)
 
+    async def get_by_name(self, name: str) -> Position | None:
+        stmt = select(Position).where(Position.name == name)
+        scalar = await self.session.scalars(stmt)
+        return scalar.one_or_none()
+
 
 class EmployeeRepository(BaseRepository[Employee]):
     def __init__(self, session: AsyncSession) -> None:
@@ -28,28 +35,48 @@ class EmployeeRepository(BaseRepository[Employee]):
         stmt = (
             select(Employee)
             .where(Employee.tab_number == tab_number)
-            .options(selectinload(Employee.position))
+            .options(selectinload(Employee.position).selectinload(Position.groups))
         )
         scalar = await self.session.scalars(stmt)
         return scalar.one_or_none()
+
+    async def list_all(self) -> Sequence[Employee]:
+        stmt = select(Employee)
+        scalar = await self.session.scalars(stmt)
+        return scalar.all()
+
+class ChecklistGroupRepository(BaseRepository[ChecklistGroup]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(ChecklistGroup, session)
 
 
 class ChecklistRepository(BaseRepository[Checklist]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Checklist, session)
 
-    async def get_active_for_position(
+    async def get_active_for_group(
         self,
-        position_id: int,
+        group_id: int,
     ) -> Checklist | None:
         stmt = (
             select(Checklist)
             .where(
-                Checklist.position_id == position_id,
+                Checklist.group_id == group_id,
                 Checklist.is_active.is_(True),
             )
             .order_by(Checklist.created_at.desc())
-            .options(selectinload(Checklist.questions))
+            .options(selectinload(Checklist.questions), selectinload(Checklist.group))
+            .limit(1)
+        )
+        scalar = await self.session.scalars(stmt)
+        return scalar.one_or_none()
+
+    async def get_default(self) -> Checklist | None:
+        stmt = (
+            select(Checklist)
+            .where(Checklist.is_default.is_(True))
+            .order_by(Checklist.created_at.desc())
+            .options(selectinload(Checklist.questions), selectinload(Checklist.group))
             .limit(1)
         )
         scalar = await self.session.scalars(stmt)
@@ -103,6 +130,39 @@ class ChecklistSessionRepository(BaseRepository[ChecklistSession]):
             selectinload(ChecklistSession.checklist).selectinload(
                 Checklist.questions,
             ),
+            selectinload(ChecklistSession.checklist).selectinload(Checklist.group),
+            selectinload(ChecklistSession.employee).selectinload(Employee.position),
+        )
+        scalar = await self.session.scalars(stmt)
+        return scalar.one_or_none()
+
+    async def get_completed_for_employee_on_date(
+        self,
+        employee_id: int,
+        target_date: date,
+    ) -> ChecklistSession | None:
+        start = datetime.combine(target_date, time.min, tzinfo=UTC)
+        end = datetime.combine(target_date, time.max, tzinfo=UTC)
+        stmt = (
+            select(ChecklistSession)
+            .where(
+                ChecklistSession.employee_id == employee_id,
+                ChecklistSession.status == ChecklistSessionStatus.COMPLETED,
+                ChecklistSession.completed_at.is_not(None),
+                ChecklistSession.completed_at >= start,
+                ChecklistSession.completed_at <= end,
+            )
+            .order_by(ChecklistSession.completed_at.desc())
+            .options(
+                selectinload(ChecklistSession.answers).selectinload(
+                    ChecklistAnswer.question,
+                ),
+                selectinload(ChecklistSession.checklist).selectinload(
+                    Checklist.questions,
+                ),
+                selectinload(ChecklistSession.employee).selectinload(Employee.position),
+            )
+            .limit(1)
         )
         scalar = await self.session.scalars(stmt)
         return scalar.one_or_none()

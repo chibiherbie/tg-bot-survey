@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from core.logs import logger
 from entities.checklist.enums import (
@@ -46,9 +46,32 @@ class ChecklistFlowService(BaseService):
         return await self.employee_repository.get_by_tab_number(tab_number)
 
     async def get_active_checklist_for_employee(self, employee: Employee) -> Checklist | None:
-        return await self.checklist_repository.get_active_for_position(
-            employee.position_id,
-        )
+        position = employee.position
+        if position is not None and position.groups:
+            for group in position.groups:
+                checklist = await self.checklist_repository.get_active_for_group(group.id)
+                if checklist:
+                    logger.info(
+                        "Checklist selected by group",
+                        employee_id=employee.id,
+                        group_id=group.id,
+                        checklist_id=checklist.id,
+                    )
+                    return checklist
+        checklist = await self.checklist_repository.get_default()
+        if checklist:
+            logger.info(
+                "Default checklist selected",
+                employee_id=employee.id,
+                checklist_id=checklist.id,
+            )
+        else:
+            logger.warning(
+                "No checklist available",
+                employee_id=employee.id,
+                position_id=employee.position_id,
+            )
+        return checklist
 
     async def start_or_get_session(
         self,
@@ -91,6 +114,17 @@ class ChecklistFlowService(BaseService):
     async def list_questions(self, checklist_id: int) -> list[ChecklistQuestion]:
         return list(
             await self.question_repository.list_for_checklist(checklist_id),
+        )
+
+    async def get_completed_session_for_employee_on_date(
+        self,
+        *,
+        employee_id: int,
+        target_date: date,
+    ) -> ChecklistSession | None:
+        return await self.session_repository.get_completed_for_employee_on_date(
+            employee_id,
+            target_date,
         )
 
     async def save_answer(
