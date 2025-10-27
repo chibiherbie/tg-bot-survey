@@ -107,7 +107,121 @@ make init
 
 Администратор может управлять группами и набором чек листов напрямую в БД.
 
-## 6. Системные настройки (`app_settings`)
+## 6. Структура БД и взаимосвязи
+
+| Таблица | Назначение | Связи                                                                                                          |
+|---------|------------|----------------------------------------------------------------------------------------------------------------|
+| `positions` | Справочник должностей | `positions` ← `employees.position_id`; многие-ко-многим с `checklist_groups` через `position_checklist_groups` |
+| `employees` | Сотрудники (`tab_number`, `position_id`, `is_active`) | Ссылается на `positions`; участвует в `checklist_sessions`                                                     |
+| `checklist_groups` | Группы чеклистов («Водители», и т.п.) | Связаны с должностями через `position_checklist_groups`; на них ссылаются чеклисты                             |
+| `position_checklist_groups` | Связующая таблица должность ↔ группа | Позволяет назначить одной должности несколько групп (приоритет — по времени добавления)                        |
+| `checklists` | Карточки чеклистов (`title`, `description`, `is_active`, `is_default`) | `group_id` → `checklist_groups`; `checklist_questions` и `checklist_sessions`                                  |
+| `checklist_questions` | Вопросы, их порядок и признак «нужно фото» | Связаны с `checklists`                                                                                         |
+| `checklist_sessions` | Прохождения чеклистов (`user_id`, `employee_id`, `status`, `feedback_*`) | Связаны с `employees`, `checklists`, `checklist_answers`                                                       |
+| `checklist_answers` | Ответы на вопросы + сохранённые фото | `session_id` → `checklist_sessions`, `question_id` → `checklist_questions`                                     |
+| `app_settings` | Глобальные JSON-настройки (импорт XLSX, SMTP и т.д.) | -                                                                                                              |
+
+### 6.1. Примеры SQL
+
+Добавить группу и привязать должность:
+```sql
+INSERT INTO checklist_groups (name, description)
+VALUES ('Водители', 'Все водительские позиции')
+RETURNING id; -- допустим, вернуло 1
+
+-- найдём id должности
+SELECT id FROM positions WHERE name = 'Водитель грузовика';
+-- привяжем должность к группе
+INSERT INTO position_checklist_groups (position_id, group_id) VALUES (42, 1);
+```
+
+Назначить чеклист группе и сделать дефолтным:
+```sql
+UPDATE checklists SET is_default = false;                 -- сбросить прежний дефолт (опционально)
+UPDATE checklists SET group_id = 1, is_default = false WHERE id = 7;  -- чеклист группы «Водители»
+UPDATE checklists SET is_default = true WHERE id = 3;                  -- чеклист по умолчанию
+```
+
+Добавить/обновить сотрудника руками:
+```sql
+INSERT INTO employees (tab_number, position_id, is_active)
+VALUES ('123456', 42, true)
+ON CONFLICT (tab_number)
+DO UPDATE SET position_id = EXCLUDED.position_id, is_active = true;
+```
+
+Настроить SMTP для заявок:
+```sql
+UPDATE app_settings
+SET value = jsonb_strip_nulls(
+        value || jsonb_build_object(
+            'smtp_host', 'smtp.example.com',
+            'smtp_port', 465,
+            'use_tls', true,
+            'from_email', 'bot@example.com',
+            'to_emails', jsonb_build_array('hr@example.com', 'lead@example.com'),
+            'username', 'bot@example.com',
+            'password', 'super-secret'
+        )
+    )
+WHERE key = 'position_change_notification';
+```
+
+## 7. Управление чеклистами и ответами
+
+### 7.1. Создание / обновление чеклиста
+1. Создайте (или убедитесь, что создана) группа в `checklist_groups`.
+2. Добавьте запись в `checklists`, указав `group_id` либо `is_default=true`, если чеклист общий:
+   ```sql
+   INSERT INTO checklists (title, description, group_id, is_active, is_default)
+   VALUES ('Предрейсовый осмотр', 'Осмотр ТС перед линией', 1, true, false)
+   RETURNING id;
+   ```
+3. Добавьте вопросы в `checklist_questions`. Поле `order` определяет порядок:
+   ```sql
+   INSERT INTO checklist_questions (checklist_id, text, "order", requires_photo)
+   VALUES
+     (15, 'Проверить уровень масла', 1, false),
+     (15, 'Сфотографировать состояние колёс', 2, true),
+     (15, 'Проверить аптечку', 3, false);
+   ```
+4. Чтобы деактивировать чеклист без удаления, установите `is_active=false`. При необходимости можно держать несколько активных чеклистов на группу — бот выберет самый свежий.
+
+### 7.2. Что такое сессия (`checklist_sessions`)
+- Запись создаётся при подтверждении должности и содержит `status` (`IN_PROGRESS`/`COMPLETED`), `employee_id`, `checklist_id`, время завершения и поля для отзыва.
+- Если пользователь покидает бота, незавершённая сессия (`IN_PROGRESS`) будет возобновлена при следующем запуске / вводе табельного.
+- Отзыв сохраняется в `feedback_text` или `feedback_voice_file_id`/`feedback_voice_unique_id`, а момент отправки — в `feedback_submitted_at`.
+
+### 7.3. Просмотр ответов
+Получить список сессий по табельному номеру:
+```sql
+SELECT cs.id, cs.status, cs.completed_at, cs.feedback_text,
+       e.tab_number, p.name AS position, cg.name AS group_name
+FROM checklist_sessions cs
+JOIN employees e ON e.id = cs.employee_id
+LEFT JOIN positions p ON p.id = e.position_id
+LEFT JOIN checklists c ON c.id = cs.checklist_id
+LEFT JOIN checklist_groups cg ON cg.id = c.group_id
+WHERE e.tab_number = '123456'
+ORDER BY cs.created_at DESC;
+```
+
+Получить ответы конкретной сессии:
+```sql
+SELECT cq.order, cq.text, ca.answer, ca.photo_file_id
+FROM checklist_answers ca
+JOIN checklist_questions cq ON cq.id = ca.question_id
+WHERE ca.session_id = 101
+ORDER BY cq.order;
+```
+
+Голосовой отзыв можно переслать себе через `/admin → Посмотреть отчёт` — бот отправит voice‑сообщение по сохранённому `file_id`.
+
+### 7.4. Отслеживание заявок на смену должности
+- Данные SMTP хранятся в `app_settings.position_change_notification`.
+- После нажатия пользователем «Отправить заявку…» письмо отправится на перечисленные e‑mail адреса и пользователь увидит подтверждение. Если настройки некорректны — придёт сообщение об ошибке.
+
+## 8. Системные настройки (`app_settings`)
 Ключи по умолчанию:
 - `employee_import_config` — конфигурация импорта XLSX (sheet/columns).
 - `position_change_notification` — SMTP-параметры для заявок на смену должности.
@@ -119,7 +233,7 @@ SET value = jsonb_set(value, '{smtp_host}', '"smtp.example.com"')
 WHERE key = 'position_change_notification';
 ```
 
-## 8. Полезные директории
+## 9. Полезные директории
 ```
 backend/app/entities        # ORM-модели
 backend/app/services        # бизнес‑логика
