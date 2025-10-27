@@ -160,6 +160,14 @@ class ChecklistSession(DBModel, CreatedAtMixin, UpdatedAtMixin):
         cascade="all,delete-orphan",
     )
 
+    feedback_text: Mapped[str | None] = mapped_column(Text())
+    feedback_voice_file_id: Mapped[str | None] = mapped_column(String(512))
+    feedback_voice_unique_id: Mapped[str | None] = mapped_column(String(255))
+    feedback_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        default=None,
+    )
+
 
 class ChecklistAnswer(DBModel, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "checklist_answers"

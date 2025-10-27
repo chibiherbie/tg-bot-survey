@@ -13,10 +13,11 @@ from services.checklist import ChecklistFlowService
 from services.position_change import PositionChangeRequestService
 from services.telegram import TelegramService
 from shared.enums.group import Group
-from telegram.callback_data.checklist import PositionConfirmCallback
+from telegram.callback_data.checklist import FeedbackCallback, PositionConfirmCallback
 from telegram.keyboards.checklist import (
     checklist_answer_keyboard,
     position_confirmation_keyboard,
+    feedback_choice_keyboard,
     remove_keyboard,
 )
 from telegram.middlewares.filters.chat import ChatTypeFilter
@@ -30,7 +31,7 @@ router = Router()
 ANSWER_BY_TEXT: Mapping[str, ChecklistAnswerValue] = {
     "да": ChecklistAnswerValue.YES,
     "нет": ChecklistAnswerValue.NO,
-    "нельзя выполнить": ChecklistAnswerValue.NOT_APPLICABLE,
+    "не применимо": ChecklistAnswerValue.NOT_APPLICABLE,
 }
 
 
@@ -102,16 +103,15 @@ async def _advance_flow(
     )
     if next_question is None:
         await checklist_flow_service.complete_session(session)
+        await state.set_state(ChecklistStates.waiting_feedback_choice)
         await telegram_service.send_message(
             chat_id=message.chat.id,
             text=(
                 "Спасибо! Все вопросы пройдены, ответы сохранены. "
-                "Если нужно пройти еще один чеклист, отправьте новый табельный номер."
+                "Вы можете оставить отзыв о чеклисте или пропустить этот шаг."
             ),
-            reply_markup=remove_keyboard(),
+            reply_markup=feedback_choice_keyboard(),
         )
-        await state.clear()
-        await state.set_state(ChecklistStates.waiting_tab_number)
         return
 
     await state.set_state(ChecklistStates.waiting_answer)
@@ -208,6 +208,62 @@ async def _start_checklist_flow(
         message=base_message,
         state=state,
     )
+
+
+async def _save_feedback_and_finish(
+    *,
+    message: Message,
+    state: FSMContext,
+    checklist_flow_service: ChecklistFlowService,
+    telegram_service: TelegramService,
+    feedback_text: str | None = None,
+    feedback_voice_file_id: str | None = None,
+    feedback_voice_unique_id: str | None = None,
+) -> None:
+    data = await state.get_data()
+    session_id = data.get("session_id")
+    if session_id is None:
+        await telegram_service.send_message(
+            chat_id=message.chat.id,
+            text="Сессия не найдена. Начните заново командой /start.",
+        )
+        await state.clear()
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+    session = await checklist_flow_service.load_session(session_id)
+    if session is None:
+        await telegram_service.send_message(
+            chat_id=message.chat.id,
+            text="Не удалось загрузить данные. Попробуйте позже.",
+        )
+        await state.clear()
+        await state.set_state(ChecklistStates.waiting_tab_number)
+        return
+    await checklist_flow_service.save_feedback(
+        session=session,
+        feedback_text=feedback_text,
+        feedback_voice_file_id=feedback_voice_file_id,
+        feedback_voice_unique_id=feedback_voice_unique_id,
+    )
+    await telegram_service.send_message(
+        chat_id=message.chat.id,
+        text="Спасибо за отзыв!",
+    )
+    await _finish_session_flow(state, telegram_service, message.chat.id)
+
+
+async def _finish_session_flow(
+    state: FSMContext,
+    telegram_service: TelegramService,
+    chat_id: int,
+) -> None:
+    await telegram_service.send_message(
+        chat_id=chat_id,
+        text="Если нужно пройти еще один чеклист, отправьте новый табельный номер.",
+        reply_markup=remove_keyboard(),
+    )
+    await state.clear()
+    await state.set_state(ChecklistStates.waiting_tab_number)
 
 
 @router.message(
@@ -310,7 +366,7 @@ async def handle_position_confirmation(
         else:
             await telegram_service.send_message(
                 chat_id=chat_id,
-                text="Не удалось отправить заявку. Сообщите администратору.",
+                text="Не удалось отправить заявку на смену должности. Сообщите администратору.",
             )
         await state.set_state(ChecklistStates.waiting_tab_number)
         return
@@ -344,6 +400,100 @@ async def handle_position_confirmation(
     )
 
 
+@router.callback_query(
+    ChecklistStates.waiting_feedback_choice,
+    FeedbackCallback.filter(),
+    GroupFilter(Group.USER),
+)
+async def handle_feedback_choice(
+    callback: CallbackQuery,
+    callback_data: FeedbackCallback,
+    state: FSMContext,
+    telegram_service: FromDishka[TelegramService],
+) -> None:
+    await callback.answer()
+    chat_id = callback.message.chat.id if callback.message else callback.from_user.id
+    action = callback_data.action
+    if action == "provide":
+        await state.set_state(ChecklistStates.waiting_feedback)
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text="Расскажите, что можно улучшить. Можно отправить текст или голосовое сообщение.",
+            reply_markup=remove_keyboard(),
+        )
+        return
+    await telegram_service.send_message(
+        chat_id=chat_id,
+        text="Отзыв пропущен.",
+    )
+    await _finish_session_flow(state, telegram_service, chat_id)
+
+
+@router.message(
+    ChecklistStates.waiting_feedback,
+    GroupFilter(Group.USER),
+    ChatTypeFilter(ChatType.PRIVATE),
+    F.text,
+)
+async def handle_feedback_text(
+    message: Message,
+    state: FSMContext,
+    checklist_flow_service: FromDishka[ChecklistFlowService],
+    telegram_service: FromDishka[TelegramService],
+) -> None:
+    await _save_feedback_and_finish(
+        message=message,
+        state=state,
+        checklist_flow_service=checklist_flow_service,
+        telegram_service=telegram_service,
+        feedback_text=message.text,
+    )
+
+
+@router.message(
+    ChecklistStates.waiting_feedback,
+    GroupFilter(Group.USER),
+    ChatTypeFilter(ChatType.PRIVATE),
+    F.voice,
+)
+async def handle_feedback_voice(
+    message: Message,
+    state: FSMContext,
+    checklist_flow_service: FromDishka[ChecklistFlowService],
+    telegram_service: FromDishka[TelegramService],
+) -> None:
+    voice = message.voice
+    if voice is None:
+        await telegram_service.send_message(
+            chat_id=message.chat.id,
+            text="Не удалось обработать голосовое сообщение. Попробуйте снова.",
+        )
+        return
+    await _save_feedback_and_finish(
+        message=message,
+        state=state,
+        checklist_flow_service=checklist_flow_service,
+        telegram_service=telegram_service,
+        feedback_voice_file_id=voice.file_id,
+        feedback_voice_unique_id=voice.file_unique_id,
+    )
+
+
+@router.message(
+    ChecklistStates.waiting_feedback,
+    GroupFilter(Group.USER),
+    ChatTypeFilter(ChatType.PRIVATE),
+)
+async def handle_feedback_invalid(
+    message: Message,
+    telegram_service: FromDishka[TelegramService],
+) -> None:
+    await telegram_service.send_message(
+        chat_id=message.chat.id,
+        text="Пришлите текст или голосовое сообщение, либо нажмите 'Пропустить'.",
+    )
+
+
 @router.message(
     ChecklistStates.waiting_answer,
     GroupFilter(Group.USER),
@@ -360,7 +510,7 @@ async def handle_answer(
     if normalized_answer not in ANSWER_BY_TEXT:
         await telegram_service.send_message(
             chat_id=message.chat.id,
-            text="Используйте кнопки для ответа: Да, Нет или Нельзя выполнить.",
+            text="Используйте кнопки для ответа: Да, Нет или Не применимо.",
         )
         return
 

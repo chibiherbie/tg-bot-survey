@@ -188,6 +188,29 @@ class ChecklistFlowService(BaseService):
         )
         return updated
 
+    async def save_feedback(
+        self,
+        *,
+        session: ChecklistSession,
+        feedback_text: str | None = None,
+        feedback_voice_file_id: str | None = None,
+        feedback_voice_unique_id: str | None = None,
+    ) -> ChecklistSession:
+        payload = {
+            "feedback_text": feedback_text,
+            "feedback_voice_file_id": feedback_voice_file_id,
+            "feedback_voice_unique_id": feedback_voice_unique_id,
+            "feedback_submitted_at": datetime.now(UTC),
+        }
+        session = await self.session_repository.update(session, payload)
+        logger.info(
+            "Checklist feedback saved",
+            session_id=session.id,
+            has_text=bool(feedback_text),
+            has_voice=bool(feedback_voice_file_id),
+        )
+        return session
+
     async def get_next_unanswered_question(
         self,
         session_id: int,

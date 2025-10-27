@@ -28,7 +28,7 @@ router = Router()
 ANSWER_LABELS: dict[ChecklistAnswerValue, str] = {
     ChecklistAnswerValue.YES: "Да",
     ChecklistAnswerValue.NO: "Нет",
-    ChecklistAnswerValue.NOT_APPLICABLE: "Нельзя выполнить",
+    ChecklistAnswerValue.NOT_APPLICABLE: "Не применимо",
 }
 
 
@@ -245,6 +245,18 @@ async def _send_report(
                 photo=answer.photo_file_id,
                 caption="Фото подтверждение",
             )
+
+    if session.feedback_text:
+        await telegram_service.send_message(
+            chat_id=chat_id,
+            text=f"Отзыв: {session.feedback_text}",
+        )
+    if session.feedback_voice_file_id:
+        await telegram_service.bot.send_voice(
+            chat_id=chat_id,
+            voice=session.feedback_voice_file_id,
+            caption="Голосовой отзыв",
+        )
 
     await telegram_service.send_message(
         chat_id=chat_id,
