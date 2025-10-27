@@ -1,0 +1,60 @@
+# Backend (Python, PostgreSQL)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.pot
+*.pyc
+*.env
+.venv/
+venv/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.coverage
+.tox/
+.DS_Store
+.idea/
+
+# PostgreSQL
+*.psql
+*.pgsql
+*.sql
+*.dump
+*.bak
+
+# Frontend (Vue.js, TypeScript, Vite)
+node_modules/
+dist/
+*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Vite
+.vite/
+
+# Env files
+.env
+
+# Tunneling configuration (generated from .env)
+tunneling-conf.toml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editor directories and files
+.idea/
+*.sublime-workspace
+*.sublime-project
+client_lib/dist/

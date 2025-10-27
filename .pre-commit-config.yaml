@@ -1,0 +1,22 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.3
+    hooks:
+      - id: ruff
+        name: "Ruff: Backend"
+        args: [--fix]
+        files: ^backend/
+        additional_dependencies: [ruff>=0.12.3]
+      - id: ruff
+        name: "Ruff: Scheduler"
+        args: [--fix]
+        files: ^scheduler/
+        additional_dependencies: [ruff>=0.12.3]
+      - id: ruff-format
+        name: "Ruff Format: Backend"
+        files: ^backend/
+        additional_dependencies: [ruff>=0.12.3]
+      - id: ruff-format
+        name: "Ruff Format: Scheduler"
+        files: ^scheduler/
+        additional_dependencies: [ruff>=0.12.3]
