@@ -5,4 +5,4 @@ from telegram.handlers import (
     service_commands,
 )
 
-__all__ = ["commands", "service_commands", "checklist", "admin"]
+__all__ = ["admin", "checklist", "commands", "service_commands"]

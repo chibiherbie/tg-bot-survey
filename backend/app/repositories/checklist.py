@@ -35,7 +35,9 @@ class EmployeeRepository(BaseRepository[Employee]):
         stmt = (
             select(Employee)
             .where(Employee.tab_number == tab_number)
-            .options(selectinload(Employee.position).selectinload(Position.groups))
+            .options(
+                selectinload(Employee.position).selectinload(Position.groups),
+            )
         )
         scalar = await self.session.scalars(stmt)
         return scalar.one_or_none()
@@ -44,6 +46,7 @@ class EmployeeRepository(BaseRepository[Employee]):
         stmt = select(Employee)
         scalar = await self.session.scalars(stmt)
         return scalar.all()
+
 
 class ChecklistGroupRepository(BaseRepository[ChecklistGroup]):
     def __init__(self, session: AsyncSession) -> None:
@@ -65,7 +68,10 @@ class ChecklistRepository(BaseRepository[Checklist]):
                 Checklist.is_active.is_(True),
             )
             .order_by(Checklist.created_at.desc())
-            .options(selectinload(Checklist.questions), selectinload(Checklist.group))
+            .options(
+                selectinload(Checklist.questions),
+                selectinload(Checklist.group),
+            )
             .limit(1)
         )
         scalar = await self.session.scalars(stmt)
@@ -76,7 +82,10 @@ class ChecklistRepository(BaseRepository[Checklist]):
             select(Checklist)
             .where(Checklist.is_default.is_(True))
             .order_by(Checklist.created_at.desc())
-            .options(selectinload(Checklist.questions), selectinload(Checklist.group))
+            .options(
+                selectinload(Checklist.questions),
+                selectinload(Checklist.group),
+            )
             .limit(1)
         )
         scalar = await self.session.scalars(stmt)
@@ -123,15 +132,23 @@ class ChecklistSessionRepository(BaseRepository[ChecklistSession]):
         self,
         session_id: int,
     ) -> ChecklistSession | None:
-        stmt = select(ChecklistSession).where(ChecklistSession.id == session_id).options(
-            selectinload(ChecklistSession.answers).selectinload(
-                ChecklistAnswer.question,
-            ),
-            selectinload(ChecklistSession.checklist).selectinload(
-                Checklist.questions,
-            ),
-            selectinload(ChecklistSession.checklist).selectinload(Checklist.group),
-            selectinload(ChecklistSession.employee).selectinload(Employee.position),
+        stmt = (
+            select(ChecklistSession)
+            .where(ChecklistSession.id == session_id)
+            .options(
+                selectinload(ChecklistSession.answers).selectinload(
+                    ChecklistAnswer.question,
+                ),
+                selectinload(ChecklistSession.checklist).selectinload(
+                    Checklist.questions,
+                ),
+                selectinload(ChecklistSession.checklist).selectinload(
+                    Checklist.group,
+                ),
+                selectinload(ChecklistSession.employee).selectinload(
+                    Employee.position,
+                ),
+            )
         )
         scalar = await self.session.scalars(stmt)
         return scalar.one_or_none()
@@ -160,7 +177,9 @@ class ChecklistSessionRepository(BaseRepository[ChecklistSession]):
                 selectinload(ChecklistSession.checklist).selectinload(
                     Checklist.questions,
                 ),
-                selectinload(ChecklistSession.employee).selectinload(Employee.position),
+                selectinload(ChecklistSession.employee).selectinload(
+                    Employee.position,
+                ),
             )
             .limit(1)
         )
@@ -177,12 +196,9 @@ class ChecklistAnswerRepository(BaseRepository[ChecklistAnswer]):
         session_id: int,
         question_id: int,
     ) -> ChecklistAnswer | None:
-        stmt = (
-            select(ChecklistAnswer)
-            .where(
-                ChecklistAnswer.session_id == session_id,
-                ChecklistAnswer.question_id == question_id,
-            )
+        stmt = select(ChecklistAnswer).where(
+            ChecklistAnswer.session_id == session_id,
+            ChecklistAnswer.question_id == question_id,
         )
         scalar = await self.session.scalars(stmt)
         return scalar.one_or_none()

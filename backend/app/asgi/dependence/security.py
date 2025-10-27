@@ -8,7 +8,7 @@ from core.security.token import get_token
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 from entities.user.models import User
-from fastapi import Depends, HTTPException, Security, params
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from services.user import UserService
 from shared.enums.group import Group

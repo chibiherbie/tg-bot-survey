@@ -21,7 +21,11 @@ class AppSettingsService(BaseService):
             return default
         return value
 
-    async def get_string(self, key: str, default: str | None = None) -> str | None:
+    async def get_string(
+        self,
+        key: str,
+        default: str | None = None,
+    ) -> str | None:
         value = await self.get_value(key)
         if value is None:
             return default

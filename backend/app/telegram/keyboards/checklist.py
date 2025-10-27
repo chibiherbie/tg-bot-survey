@@ -5,8 +5,10 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
 )
-
-from telegram.callback_data.checklist import FeedbackCallback, PositionConfirmCallback
+from telegram.callback_data.checklist import (
+    FeedbackCallback,
+    PositionConfirmCallback,
+)
 
 
 def checklist_answer_keyboard() -> ReplyKeyboardMarkup:
@@ -32,17 +34,23 @@ def position_confirmation_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="Да, всё верно",
-                    callback_data=PositionConfirmCallback(action="confirm").pack(),
+                    callback_data=PositionConfirmCallback(
+                        action="confirm",
+                    ).pack(),
                 ),
                 InlineKeyboardButton(
                     text="Нет",
-                    callback_data=PositionConfirmCallback(action="deny").pack(),
+                    callback_data=PositionConfirmCallback(
+                        action="deny",
+                    ).pack(),
                 ),
             ],
             [
                 InlineKeyboardButton(
                     text="Отправить заявку на смену должности",
-                    callback_data=PositionConfirmCallback(action="request_change").pack(),
+                    callback_data=PositionConfirmCallback(
+                        action="request_change",
+                    ).pack(),
                 ),
             ],
         ],

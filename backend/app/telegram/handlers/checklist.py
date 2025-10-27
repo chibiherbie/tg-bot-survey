@@ -5,7 +5,6 @@ from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, PhotoSize
 from dishka import FromDishka
-
 from entities.checklist.enums import ChecklistAnswerValue
 from entities.checklist.models import ChecklistQuestion, Employee
 from entities.user.models import User
@@ -13,17 +12,19 @@ from services.checklist import ChecklistFlowService
 from services.position_change import PositionChangeRequestService
 from services.telegram import TelegramService
 from shared.enums.group import Group
-from telegram.callback_data.checklist import FeedbackCallback, PositionConfirmCallback
+from telegram.callback_data.checklist import (
+    FeedbackCallback,
+    PositionConfirmCallback,
+)
 from telegram.keyboards.checklist import (
     checklist_answer_keyboard,
-    position_confirmation_keyboard,
     feedback_choice_keyboard,
+    position_confirmation_keyboard,
     remove_keyboard,
 )
 from telegram.middlewares.filters.chat import ChatTypeFilter
 from telegram.middlewares.filters.permissions import GroupFilter
 from telegram.states.checklist import ChecklistStates
-
 
 router = Router()
 
@@ -44,9 +45,14 @@ async def _present_question(
 ) -> None:
     question_index = question_ids.index(question.id) + 1
     total_questions = len(question_ids)
-    text_parts = [f"Вопрос {question_index} из {total_questions}", question.text]
+    text_parts = [
+        f"Вопрос {question_index} из {total_questions}",
+        question.text,
+    ]
     if question.requires_photo:
-        text_parts.append("После ответа пришлите фото подтверждения одним сообщением.")
+        text_parts.append(
+            "После ответа пришлите фото подтверждения одним сообщением.",
+        )
     await state.update_data(current_question_id=question.id)
     await telegram_service.send_message(
         chat_id=message.chat.id,
@@ -81,7 +87,9 @@ async def _advance_flow(
         )
         return
 
-    questions = await checklist_flow_service.list_questions(session.checklist_id)
+    questions = await checklist_flow_service.list_questions(
+        session.checklist_id,
+    )
     if not questions:
         await checklist_flow_service.complete_session(session)
         await telegram_service.send_message(
@@ -134,9 +142,14 @@ async def _start_checklist_flow(
     chat_id: int,
     message: Message | None,
 ) -> None:
-    await state.update_data(pending_employee_tab=None, pending_employee_id=None)
+    await state.update_data(
+        pending_employee_tab=None,
+        pending_employee_id=None,
+    )
 
-    checklist = await checklist_flow_service.get_active_checklist_for_employee(employee)
+    checklist = await checklist_flow_service.get_active_checklist_for_employee(
+        employee,
+    )
     if checklist is None:
         await telegram_service.send_message(
             chat_id=chat_id,
@@ -162,7 +175,9 @@ async def _start_checklist_flow(
         await state.set_state(ChecklistStates.waiting_tab_number)
         return
 
-    questions = await checklist_flow_service.list_questions(session.checklist_id)
+    questions = await checklist_flow_service.list_questions(
+        session.checklist_id,
+    )
     if not questions:
         await checklist_flow_service.complete_session(session)
         await telegram_service.send_message(
@@ -286,7 +301,9 @@ async def handle_tab_number(
         )
         return
 
-    employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+    employee = await checklist_flow_service.get_employee_by_tab_number(
+        tab_number,
+    )
     if employee is None or not employee.is_active:
         await telegram_service.send_message(
             chat_id=message.chat.id,
@@ -294,7 +311,9 @@ async def handle_tab_number(
         )
         return
 
-    position_name = employee.position.name if employee.position else "не указана"
+    position_name = (
+        employee.position.name if employee.position else "не указана"
+    )
     await state.update_data(
         pending_employee_tab=employee.tab_number,
         pending_employee_id=employee.id,
@@ -302,10 +321,7 @@ async def handle_tab_number(
     await state.set_state(ChecklistStates.confirm_position)
     await telegram_service.send_message(
         chat_id=message.chat.id,
-        text=(
-            f"Текущая должность: {position_name}.\n"
-            "Это ваша должность?"
-        ),
+        text=(f"Текущая должность: {position_name}.\nЭто ваша должность?"),
         reply_markup=position_confirmation_keyboard(),
     )
 
@@ -327,7 +343,9 @@ async def handle_position_confirmation(
     await callback.answer()
     data = await state.get_data()
     tab_number = data.get("pending_employee_tab")
-    chat_id = callback.message.chat.id if callback.message else callback.from_user.id
+    chat_id = (
+        callback.message.chat.id if callback.message else callback.from_user.id
+    )
 
     if tab_number is None:
         await state.set_state(ChecklistStates.waiting_tab_number)
@@ -345,11 +363,16 @@ async def handle_position_confirmation(
             text="Введите корректный табельный номер.",
             reply_markup=remove_keyboard(),
         )
-        await state.update_data(pending_employee_tab=None, pending_employee_id=None)
+        await state.update_data(
+            pending_employee_tab=None,
+            pending_employee_id=None,
+        )
         return
 
     if action == "request_change":
-        employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+        employee = await checklist_flow_service.get_employee_by_tab_number(
+            tab_number,
+        )
         if employee is None:
             await telegram_service.send_message(
                 chat_id=chat_id,
@@ -379,7 +402,9 @@ async def handle_position_confirmation(
         await state.set_state(ChecklistStates.waiting_tab_number)
         return
 
-    employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+    employee = await checklist_flow_service.get_employee_by_tab_number(
+        tab_number,
+    )
     if employee is None or not employee.is_active:
         await telegram_service.send_message(
             chat_id=chat_id,
@@ -412,7 +437,9 @@ async def handle_feedback_choice(
     telegram_service: FromDishka[TelegramService],
 ) -> None:
     await callback.answer()
-    chat_id = callback.message.chat.id if callback.message else callback.from_user.id
+    chat_id = (
+        callback.message.chat.id if callback.message else callback.from_user.id
+    )
     action = callback_data.action
     if action == "provide":
         await state.set_state(ChecklistStates.waiting_feedback)
@@ -534,8 +561,13 @@ async def handle_answer(
         )
         return
 
-    questions = await checklist_flow_service.list_questions(session.checklist_id)
-    question = next((q for q in questions if q.id == current_question_id), None)
+    questions = await checklist_flow_service.list_questions(
+        session.checklist_id,
+    )
+    question = next(
+        (q for q in questions if q.id == current_question_id),
+        None,
+    )
     if question is None:
         await _advance_flow(
             telegram_service=telegram_service,
@@ -604,7 +636,11 @@ async def handle_photo(
     session_id = data.get("session_id")
     current_question_id = data.get("current_question_id")
     pending_answer_value = data.get("pending_answer_value")
-    if session_id is None or current_question_id is None or pending_answer_value is None:
+    if (
+        session_id is None
+        or current_question_id is None
+        or pending_answer_value is None
+    ):
         await state.clear()
         await telegram_service.send_message(
             chat_id=message.chat.id,
@@ -621,8 +657,13 @@ async def handle_photo(
         )
         return
 
-    questions = await checklist_flow_service.list_questions(session.checklist_id)
-    question = next((q for q in questions if q.id == current_question_id), None)
+    questions = await checklist_flow_service.list_questions(
+        session.checklist_id,
+    )
+    question = next(
+        (q for q in questions if q.id == current_question_id),
+        None,
+    )
     if question is None:
         await _advance_flow(
             telegram_service=telegram_service,

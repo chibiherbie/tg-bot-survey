@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from openpyxl import load_workbook
-
 from repositories.checklist import EmployeeRepository, PositionRepository
 from services.app_settings import AppSettingsService
 from services.base import BaseService
-
 
 CONFIG_PATH = Path(__file__).with_name("employee_import_config.json")
 IMPORT_CONFIG_KEY = "employee_import_config"
@@ -24,7 +23,7 @@ class ImportConfig:
     column_position: str
 
     @classmethod
-    def from_mapping(cls, data: dict[str, Any]) -> "ImportConfig":
+    def from_mapping(cls, data: dict[str, Any]) -> ImportConfig:
         columns = data.get("columns") or {}
         required_fields = {"tab_number", "position"}
         missing = [field for field in required_fields if field not in columns]
@@ -111,7 +110,9 @@ class EmployeeImportService(BaseService):
             processed_tab_numbers.add(row.tab_number)
 
             position = await self._ensure_position(row.position_name)
-            existing = await self.employee_repo.get_by_tab_number(row.tab_number)
+            existing = await self.employee_repo.get_by_tab_number(
+                row.tab_number,
+            )
             payload = {
                 "position_id": position.id,
                 "is_active": True,
@@ -123,7 +124,9 @@ class EmployeeImportService(BaseService):
                 payload["tab_number"] = row.tab_number
                 await self.employee_repo.create(payload)
                 stats.created += 1
-        stats.deactivated += await self._deactivate_missing(processed_tab_numbers)
+        stats.deactivated += await self._deactivate_missing(
+            processed_tab_numbers,
+        )
         return stats
 
     async def _ensure_position(self, name: str):
@@ -131,7 +134,10 @@ class EmployeeImportService(BaseService):
             return existing
         return await self.position_repo.create({"name": name})
 
-    async def _deactivate_missing(self, processed_tab_numbers: set[str]) -> int:
+    async def _deactivate_missing(
+        self,
+        processed_tab_numbers: set[str],
+    ) -> int:
         deactivated = 0
         employees = await self.employee_repo.list_all()
         for employee in employees:
@@ -147,14 +153,21 @@ class EmployeeImportService(BaseService):
         buffer: io.BytesIO,
         config: ImportConfig,
     ) -> Iterable[EmployeeRow]:
-        workbook = load_workbook(filename=buffer, data_only=True, read_only=True)
+        workbook = load_workbook(
+            filename=buffer,
+            data_only=True,
+            read_only=True,
+        )
         try:
             sheet = self._select_sheet(workbook, config.sheet_name)
             rows = sheet.iter_rows(values_only=True)
             headers = self._extract_headers(rows)
 
             tab_idx = self._resolve_column(headers, config.column_tab_number)
-            position_idx = self._resolve_column(headers, config.column_position)
+            position_idx = self._resolve_column(
+                headers,
+                config.column_position,
+            )
 
             for row in rows:
                 tab_value = self._normalize_tab_number(
@@ -188,14 +201,19 @@ class EmployeeImportService(BaseService):
             headers = next(rows)
         except StopIteration as exc:
             raise ValueError("Файл пустой") from exc
-        return [str(value).strip() if value is not None else "" for value in headers]
+        return [
+            str(value).strip() if value is not None else ""
+            for value in headers
+        ]
 
     @staticmethod
     def _resolve_column(headers: list[str], column_name: str) -> int:
         try:
             return headers.index(column_name)
         except ValueError as exc:
-            raise ValueError(f"Колонка '{column_name}' не найдена в файле") from exc
+            raise ValueError(
+                f"Колонка '{column_name}' не найдена в файле",
+            ) from exc
 
     @staticmethod
     def _normalize_tab_number(value: Any) -> str | None:
@@ -223,7 +241,9 @@ class EmployeeImportService(BaseService):
                 raw = json.load(fp)
             return ImportConfig.from_mapping(raw)
 
-        settings_value = await self.app_settings_service.get_json(IMPORT_CONFIG_KEY)
+        settings_value = await self.app_settings_service.get_json(
+            IMPORT_CONFIG_KEY,
+        )
         if settings_value:
             return ImportConfig.from_mapping(settings_value)
 

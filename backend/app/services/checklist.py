@@ -42,14 +42,24 @@ class ChecklistFlowService(BaseService):
         self.session_repository = session_repository
         self.answer_repository = answer_repository
 
-    async def get_employee_by_tab_number(self, tab_number: str) -> Employee | None:
+    async def get_employee_by_tab_number(
+        self,
+        tab_number: str,
+    ) -> Employee | None:
         return await self.employee_repository.get_by_tab_number(tab_number)
 
-    async def get_active_checklist_for_employee(self, employee: Employee) -> Checklist | None:
+    async def get_active_checklist_for_employee(
+        self,
+        employee: Employee,
+    ) -> Checklist | None:
         position = employee.position
         if position is not None and position.groups:
             for group in position.groups:
-                checklist = await self.checklist_repository.get_active_for_group(group.id)
+                checklist = (
+                    await self.checklist_repository.get_active_for_group(
+                        group.id,
+                    )
+                )
                 if checklist:
                     logger.info(
                         "Checklist selected by group",
@@ -111,7 +121,10 @@ class ChecklistFlowService(BaseService):
     async def load_session(self, session_id: int) -> ChecklistSession | None:
         return await self.session_repository.get_with_answers(session_id)
 
-    async def list_questions(self, checklist_id: int) -> list[ChecklistQuestion]:
+    async def list_questions(
+        self,
+        checklist_id: int,
+    ) -> list[ChecklistQuestion]:
         return list(
             await self.question_repository.list_for_checklist(checklist_id),
         )
@@ -122,9 +135,11 @@ class ChecklistFlowService(BaseService):
         employee_id: int,
         target_date: date,
     ) -> ChecklistSession | None:
-        return await self.session_repository.get_completed_for_employee_on_date(
-            employee_id,
-            target_date,
+        return (
+            await self.session_repository.get_completed_for_employee_on_date(
+                employee_id,
+                target_date,
+            )
         )
 
     async def save_answer(
@@ -173,7 +188,10 @@ class ChecklistFlowService(BaseService):
         )
         return saved
 
-    async def complete_session(self, session: ChecklistSession) -> ChecklistSession:
+    async def complete_session(
+        self,
+        session: ChecklistSession,
+    ) -> ChecklistSession:
         update_schema = ChecklistSessionUpdateSchema(
             status=ChecklistSessionStatus.COMPLETED,
             completed_at=datetime.now(UTC),
@@ -216,8 +234,10 @@ class ChecklistFlowService(BaseService):
         session_id: int,
         questions: list[ChecklistQuestion],
     ) -> ChecklistQuestion | None:
-        answered_ids = await self.answer_repository.list_question_ids_for_session(
-            session_id,
+        answered_ids = (
+            await self.answer_repository.list_question_ids_for_session(
+                session_id,
+            )
         )
         for question in questions:
             if question.id not in answered_ids:

@@ -1,6 +1,9 @@
 from datetime import datetime
 
-from entities.checklist.enums import ChecklistAnswerValue, ChecklistSessionStatus
+from entities.checklist.enums import (
+    ChecklistAnswerValue,
+    ChecklistSessionStatus,
+)
 from shared.models.base import DBModel
 from shared.models.mixins import CreatedAtMixin, UpdatedAtMixin
 from sqlalchemy import (
@@ -8,7 +11,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
     Integer,
     String,
@@ -17,14 +19,24 @@ from sqlalchemy import (
     UniqueConstraint,
     sql,
 )
+from sqlalchemy import (
+    Enum as SQLEnum,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 
 position_group_table = Table(
     "position_checklist_groups",
     DBModel.metadata,
-    Column("position_id", ForeignKey("positions.id", ondelete="CASCADE"), primary_key=True),
-    Column("group_id", ForeignKey("checklist_groups.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "position_id",
+        ForeignKey("positions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "group_id",
+        ForeignKey("checklist_groups.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 
@@ -46,7 +58,11 @@ class Position(DBModel, CreatedAtMixin, UpdatedAtMixin):
 class Employee(DBModel, CreatedAtMixin, UpdatedAtMixin):
     __tablename__ = "employees"
 
-    tab_number: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    tab_number: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
 
     position_id: Mapped[int] = mapped_column(
@@ -89,7 +105,9 @@ class Checklist(DBModel, CreatedAtMixin, UpdatedAtMixin):
         ForeignKey("checklist_groups.id", ondelete="SET NULL"),
         nullable=True,
     )
-    group: Mapped[ChecklistGroup | None] = relationship(back_populates="checklists")
+    group: Mapped[ChecklistGroup | None] = relationship(
+        back_populates="checklists",
+    )
 
     questions: Mapped[list["ChecklistQuestion"]] = relationship(
         back_populates="checklist",
@@ -97,7 +115,9 @@ class Checklist(DBModel, CreatedAtMixin, UpdatedAtMixin):
         order_by="ChecklistQuestion.order",
     )
 
-    sessions: Mapped[list["ChecklistSession"]] = relationship(back_populates="checklist")
+    sessions: Mapped[list["ChecklistSession"]] = relationship(
+        back_populates="checklist",
+    )
 
 
 class ChecklistQuestion(DBModel, CreatedAtMixin, UpdatedAtMixin):
@@ -195,4 +215,6 @@ class ChecklistAnswer(DBModel, CreatedAtMixin, UpdatedAtMixin):
     photo_unique_id: Mapped[str | None] = mapped_column(String(255))
 
     session: Mapped[ChecklistSession] = relationship(back_populates="answers")
-    question: Mapped[ChecklistQuestion] = relationship(back_populates="answers")
+    question: Mapped[ChecklistQuestion] = relationship(
+        back_populates="answers",
+    )

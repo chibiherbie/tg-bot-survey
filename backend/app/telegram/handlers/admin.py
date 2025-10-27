@@ -6,10 +6,9 @@ from aiogram.enums import ChatType
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from core.logs import logger
 from dishka import FromDishka
-
 from entities.checklist.enums import ChecklistAnswerValue
-from entities.user.models import User
 from services.checklist import ChecklistFlowService
 from services.employee_import import EmployeeImportService
 from services.telegram import TelegramService
@@ -20,8 +19,6 @@ from telegram.keyboards.checklist import remove_keyboard
 from telegram.middlewares.filters.chat import ChatTypeFilter
 from telegram.middlewares.filters.permissions import GroupFilter
 from telegram.states.admin import AdminStates
-from core.logs import logger
-
 
 router = Router()
 
@@ -61,7 +58,9 @@ async def handle_admin_menu_callback(
     telegram_service: FromDishka[TelegramService],
 ) -> None:
     await callback.answer()
-    chat_id = callback.message.chat.id if callback.message else callback.from_user.id
+    chat_id = (
+        callback.message.chat.id if callback.message else callback.from_user.id
+    )
     if callback_data.action == "report":
         await state.set_state(AdminStates.waiting_report_tab_number)
         await telegram_service.send_message(
@@ -106,7 +105,9 @@ async def admin_report_tab_number(
         )
         return
 
-    employee = await checklist_flow_service.get_employee_by_tab_number(tab_number)
+    employee = await checklist_flow_service.get_employee_by_tab_number(
+        tab_number,
+    )
     if employee is None:
         await telegram_service.send_message(
             chat_id=message.chat.id,
@@ -207,7 +208,9 @@ async def _send_report(
     employee = session.employee
     checklist = session.checklist
     employee_status = " (неактивен)" if not employee.is_active else ""
-    group_name = session.checklist.group.name if session.checklist.group else None
+    group_name = (
+        session.checklist.group.name if session.checklist.group else None
+    )
     header_lines = [
         "Отчёт по чеклисту",
         f"Сотрудник: табельный № {employee.tab_number}{employee_status}",
@@ -223,7 +226,9 @@ async def _send_report(
     )
 
     questions = await checklist_flow_service.list_questions(checklist.id)
-    answers_by_question = {answer.question_id: answer for answer in session.answers}
+    answers_by_question = {
+        answer.question_id: answer for answer in session.answers
+    }
     for index, question in enumerate(questions, start=1):
         answer = answers_by_question.get(question.id)
         answer_label = (
@@ -231,10 +236,7 @@ async def _send_report(
             if answer
             else "Нет ответа"
         )
-        text = (
-            f"{index}. {question.text}\n"
-            f"Ответ: {answer_label}"
-        )
+        text = f"{index}. {question.text}\nОтвет: {answer_label}"
         await telegram_service.send_message(
             chat_id=chat_id,
             text=text,
@@ -299,7 +301,9 @@ async def handle_import_document(
         file = await telegram_service.bot.get_file(document.file_id)
         buffer = io.BytesIO()
         await telegram_service.bot.download(file, destination=buffer)
-        stats = await employee_import_service.import_from_bytes(buffer.getvalue())
+        stats = await employee_import_service.import_from_bytes(
+            buffer.getvalue(),
+        )
     except ValueError as exc:
         await telegram_service.send_message(
             chat_id=message.chat.id,

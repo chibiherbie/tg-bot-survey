@@ -1,5 +1,4 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
 from telegram.callback_data.admin import AdminMenuCallback
 
 

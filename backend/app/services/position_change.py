@@ -6,7 +6,6 @@ from entities.user.models import User
 from services.app_settings import AppSettingsService
 from services.email import EmailService
 
-
 POSITION_CHANGE_SETTINGS_KEY = "position_change_notification"
 
 
@@ -20,7 +19,9 @@ class PositionChangeRequestService:
         self.email_service = email_service
 
     async def send_request(self, user: User, employee: Employee) -> bool:
-        config = await self.settings_service.get_json(POSITION_CHANGE_SETTINGS_KEY)
+        config = await self.settings_service.get_json(
+            POSITION_CHANGE_SETTINGS_KEY,
+        )
         if not config:
             logger.warning("Position change notification config missing")
             return False
@@ -70,7 +71,9 @@ class PositionChangeRequestService:
             "Запрошено обновление должности",
             "",
             f"Telegram user id: {user.id}",
-            f"Telegram username: @{user.tg_username}" if user.tg_username else "",
+            f"Telegram username: @{user.tg_username}"
+            if user.tg_username
+            else "",
             f"Табельный номер: {employee.tab_number}",
             f"Текущая должность: {employee.position.name if employee.position else 'не указана'}",
         ]

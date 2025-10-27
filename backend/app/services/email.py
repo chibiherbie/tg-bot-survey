@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import smtplib
+from collections.abc import Sequence
 from email.message import EmailMessage
-from typing import Sequence
 
 from core.logs import logger
 from services.base import BaseService
@@ -64,6 +64,6 @@ class EmailService(BaseService):
                     if username and password:
                         smtp.login(username, password)
                     smtp.send_message(message, from_email, list(to_emails))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("Failed to send email", exc_info=exc)
             raise

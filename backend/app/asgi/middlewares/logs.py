@@ -26,7 +26,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             "query": request.url.query,
             "method": request.method,
             "headers": dict(request.headers.items()),
-            "peer_id": request.client.host if request.client is not None else None,
+            "peer_id": request.client.host
+            if request.client is not None
+            else None,
             "request_body": (await request.body()).decode(),
         }
         logger.info("Request received", **log_params)

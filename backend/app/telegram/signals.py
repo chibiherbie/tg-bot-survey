@@ -14,10 +14,9 @@ from dishka.integrations.aiogram import (
 )
 from services.telegram import TelegramService
 from telegram.config import telegram_settings
-from telegram.handlers import admin, service_commands, commands, checklist
+from telegram.handlers import admin, checklist, commands, service_commands
 from telegram.middlewares.outer.logging import TelegramLoggingMiddleware
 from telegram.middlewares.outer.user import UserMiddleware
-
 
 polling_task: asyncio.Task | None = None
 
@@ -32,9 +31,17 @@ async def aiogram_startup() -> None:
         "middlewares",
         [],
     )
-    if not any(isinstance(middleware, TelegramLoggingMiddleware) for middleware in outer_middlewares):
-        dispatcher.update.outer_middleware.register(TelegramLoggingMiddleware())
-    if not any(isinstance(middleware, UserMiddleware) for middleware in outer_middlewares):
+    if not any(
+        isinstance(middleware, TelegramLoggingMiddleware)
+        for middleware in outer_middlewares
+    ):
+        dispatcher.update.outer_middleware.register(
+            TelegramLoggingMiddleware(),
+        )
+    if not any(
+        isinstance(middleware, UserMiddleware)
+        for middleware in outer_middlewares
+    ):
         dispatcher.update.outer_middleware.register(UserMiddleware())
     logger.info("Setting up routers and di")
     dispatcher.include_router(service_commands.router)
